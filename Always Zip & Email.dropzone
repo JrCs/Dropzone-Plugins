@@ -1,0 +1,54 @@
+#!/usr/bin/ruby
+
+# Dropzone Destination Info
+# Name: Always Zip & Email
+# Description: Always Zips up the dropped files or folders and creates a new Mail attchment with the zip file.
+# Handles: NSFilenamesPboardType
+# Creator: Yves Blusseau
+# URL: http://darwinx86.org
+# IconURL: http://aptonic.com/destinations/icons/mail.png
+
+def dragged
+
+	filename = "Files"
+	
+	if $items.length == 1 and not File.directory?($items[0]) # if only 1 file
+		filename = File.basename($items[0])
+	else
+		output = `./CocoaDialog standard-inputbox --text "#{filename}" --title "Attachment File" --e --informative-text "Enter name for attachment file:"`
+
+		if output.to_i == 1 # OK button pressed
+			filename = output.split("\n")[1]
+		else
+			exit
+		end
+	end
+	
+	$dz.determinate(false)
+
+	ext = File.extname(filename).downcase[1..-1]
+		
+	# Check if we need to add zip extension
+	if ext
+		if ext != "zip"
+			# remove extension and add .zip
+			filename = File.basename(filename, ext) + "zip"
+		end
+	else
+		filename += ".zip"
+	end
+	
+	# Zip up files first
+	email_file = ZipFiles.zip($items, filename)
+	delete_zip = true
+	
+	system("osascript ../AppleScripts/mail.scpt #{email_file}")
+	ZipFiles.delete_zip(email_file) if delete_zip
+	
+	$dz.finish("Message Created")
+	$dz.url(false)
+end
+
+def clicked
+	system("open /Applications/Mail.app")
+end
