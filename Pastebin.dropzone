@@ -1,0 +1,149 @@
+#!/usr/bin/ruby
+ 
+# Dropzone Destination Info
+# Name: Pastebin
+# Description: Copies text from clipboard to pastebin.com. Replaces clipboard with pastebin url. Dragging text is possible as well.
+# Handles: NSStringPboardType
+# Events: Clicked, Dragged
+# Creator: JrCs
+# URL: portableinfo.com
+# IconURL: http://image.chromefans.org/i100/id124/pastebin-extension.png
+# OptionsNIB: Login
+# LoginTitle: Your Pastebin username and API token
+
+require 'net/http'
+require 'uri'
+
+class Pastebin
+  @@pastebin_url = 'http://pastebin.com/api/api_post.php'
+  @@pastebin_user_key_filename = File.expand_path("~/.dz_pastebin")
+  @@pastebin_api_dev_key = "fe8734420e439378794afea9513203cf"
+
+  class << self
+
+    def getPastebinUrl(data)
+      api_user_key = getUserKey()
+      format = getFormat()
+      expire = getExpire()
+      filename = prompt_filename()
+      request = Net::HTTP.post_form(URI.parse(@@pastebin_url),
+                          {"api_dev_key"        => @@pastebin_api_dev_key,
+                            "api_option"        => 'paste',
+                            "api_paste_format"  => format,
+                            "api_paste_private" => 0,
+                            "api_paste_code"    => data,
+                            "api_paste_name"    => filename,
+                            "api_paste_expire_date" => expire,
+                            "api_user_key"      => api_user_key
+                          })
+      
+      if request.code.to_i != 200
+        $dz.finish("Cancelled")
+        $dz.error("Pastebin Error", "Bad response from pastebin")
+        $dz.url(false)
+        Process.exit!
+      elsif not /(?i:https?:\/\/pastebin.com\/\w+$)/.match(request.body)
+        $dz.finish("Cancelled")
+        $dz.error("Pastebin Error", "#{request.body}")
+        $dz.url(false)
+        Process.exit!
+      else
+        request.body
+      end
+
+    end
+
+    private
+
+    def getFormat
+      result = `./CocoaDialog dropdown --text "Which Format?" --items "text" "bash" "c" "html4strict" "java" "javascript" "lua" "perl" "php" "python" "ruby" "apache" "applescript" "asm" "css" "diff" "haskell" "latex" "lisp" "lua" "mysql" "objc" "scheme" "sql" "tcl" "xml" --button1 "Ok" ‑‑no‑cancel --float --string-output`
+      return result.split("\n")[1]
+    end
+
+    def getExpire
+      expiration = {
+        "10 Minutes" => '10M',
+        "1 Heure"    => '1H',
+        "1 Jour"     => '1D',
+        "1 Mois"     => '1M',
+        "Jamais"     => 'N'
+      }
+
+      result = `./CocoaDialog dropdown --text "Expiration ?" --items "10 Minutes" "1 Heure" "1 Jour" "1 Mois" "Jamais" --button1 "Ok" ‑‑no‑cancel --float --string-output`
+      selection = result.split("\n")[1]
+      return expiration[selection]
+    end
+
+    def prompt_filename
+      output = `./CocoaDialog standard-inputbox --title "Pastebin name" --e --informative-text "Enter pastebin name:"`
+      button, filename = output.split("\n")
+
+      if button == "2"
+        $dz.finish("Cancelled")
+        $dz.url(false)
+        Process.exit!
+      end
+
+      return filename
+    end
+ 
+    def getUserKey
+      if File.readable?(@@pastebin_user_key_filename)
+        File.open(@@pastebin_user_key_filename).read.chomp
+      else
+        request = Net::HTTP.post_form(URI.parse("http://pastebin.com/api/api_login.php"),
+                                      {
+                                        "api_dev_key"       => "#{@@pastebin_api_dev_key}",
+                                        "api_user_name"     => ENV['USERNAME'],
+                                        "api_user_password" => ENV['PASSWORD']
+                                      })
+        answer = request.body
+
+        if not /^[0-9a-f]+$/.match(answer) # Check it's an hexa token in lowercase
+          $dz.finish("Cancelled")
+          $dz.error("Pastebin Error", "#{answer}")
+          $dz.url(false)
+          Process.exit!
+        else
+          File.open(@@pastebin_user_key_filename, 'w') do |f|
+            f.puts answer
+          end
+          answer
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+def dragged
+    $dz.begin("Sending text to pastebin...")
+    $dz.determinate(false)
+
+    data   = $items[0]
+    format = getFormat()
+    expire = getExpire()
+    url  = Pastebin.getPastebinUrl(data)
+    $dz.finish("Pastebin URL Copied!")
+    $dz.url(url)
+    system("open #{url}")
+end
+ 
+def clicked
+    $dz.begin("Sending text to pastebin...")
+    $dz.determinate(false)
+
+    data = readClipboard()
+    url  = Pastebin.getPastebinUrl(data)
+    $dz.finish("Pastebin URL Copied!")
+    $dz.url(url)
+    system("open #{url}")
+end
+
+def readClipboard
+    IO.popen('pbpaste') {|clipboard| clipboard.read}
+end
+
