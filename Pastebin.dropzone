@@ -123,9 +123,7 @@ def dragged
     $dz.begin("Sending text to pastebin...")
     $dz.determinate(false)
 
-    data   = $items[0]
-    format = getFormat()
-    expire = getExpire()
+    data = $items[0]
     url  = Pastebin.getPastebinUrl(data)
     $dz.finish("Pastebin URL Copied!")
     $dz.url(url)
